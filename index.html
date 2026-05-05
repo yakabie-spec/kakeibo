@@ -709,14 +709,20 @@ window.__APP_CONTINUE__ = true;
 
   // 振替系のパターン（取り込み時に「振替」フラグを立てて二重計上を防ぐ）
   const TRANSFER_PATTERNS = [
-    /振替ＩＢ.*ヤカビ/i,           // 自分名義への振替（IB）
-    /振替.*ヤカビ.*モリヨシ/i,      // 自分名義への振替
-    /ラクテンカ[−ー\-]?ドサ[−ー\-]?ビ/i,  // 楽天カード引落（クレカCSVと重複）
-    /ラクテンカードサービス/i,
-    /^[\s\u3000]*カ[−ー\-]?ド[\s\u3000]*$/i  // 「カード」のみの行（ATM出金）。前後空白OK、ハイフン種別不問
+    /振替ＩＢ.*ヤカビ/i,
+    /振替.*ヤカビ.*モリヨシ/i,
+    /ラクテンカ/i,
+    /ラクテンカードサービス/i
   ];
   function isTransfer(desc) {
-    return TRANSFER_PATTERNS.some(re => re.test(desc));
+    if (TRANSFER_PATTERNS.some(re => re.test(desc))) return true;
+    // 「カード」のみの行（ATM出金）を判定: 前後の空白を除いて「カ」と「ド」だけの3〜4文字
+    const trimmed = desc.replace(/[\s　]/g, "");
+    if (trimmed.length >= 2 && trimmed.length <= 5) {
+      // カードのバリエーション全部を含むか確認
+      if (/^カ.?ド$/.test(trimmed)) return true;
+    }
+    return false;
   }
 
   const STORAGE_KEYS = {
