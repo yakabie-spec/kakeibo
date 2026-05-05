@@ -506,6 +506,11 @@ label { font-size: 12px; color: var(--text-2); display: block; margin-bottom: 4p
       </div>
     </div>
     <div class="card">
+      <p class="section-title">追加した詳細カテゴリ</p>
+      <p style="font-size: 11px; color: var(--text-3); margin: 0 0 8px;">CSV取込やレシート入力で「+ 新規追加」から追加した詳細です。タップで削除できます。</p>
+      <div id="custom-details-list"></div>
+    </div>
+    <div class="card">
       <p class="section-title">サンプルデータ</p>
       <button id="data-seed" style="width: 100%;">12ヶ月分のサンプルを投入</button>
     </div>
@@ -568,8 +573,8 @@ window.__APP_CONTINUE__ = true;
       "通信料": ["インターネット", "携帯電話", "固定電話"],
       "保険料": ["生命保険", "医療保険", "学資保険", "個人年金"],
       "税金": ["国民健康保険料", "国民年金", "所得税", "住民税"],
-      "車両費": ["車のローン", "駐車場代", "車検代", "自動車税", "自動車保険料", "ガソリン代"],
-      "交通費": ["定期代", "電車・バス", "タクシー"],
+      "車両費": ["車のローン", "駐車場代", "車検代", "自動車税", "自動車保険料", "ガソリン代", "ETC・高速代"],
+      "交通費": ["定期代", "電車・バス", "タクシー", "新幹線", "飛行機", "船・フェリー", "宿泊費", "レンタカー", "高速・有料道路"],
       "子ども費": ["教材代", "文具・書籍代", "部活・習い事の雑費"],
       "保育料・学費": ["保育園", "小学校", "中学校", "高校", "大学"],
       "習い事": ["塾", "月謝", "カルチャースクール"],
@@ -668,6 +673,11 @@ window.__APP_CONTINUE__ = true;
     [/(ドコモ|NTT DOCOMO|au|KDDI|ソフトバンク|SOFTBANK|楽天モバイル|RAKUTEN MOBILE|ahamo|povo|UQ|ワイモバイル|携帯)/i, "expense", "通信料", "携帯電話"],
     [/(NTT|フレッツ|プロバイダ|インターネット|wifi|wi-fi|OCN|BIGLOBE|@nifty)/i, "expense", "通信料", "インターネット"],
     // === 交通 ===
+    [/(ANA|全日空|JAL|日本航空|スカイマーク|SKYMARK|ジェットスター|JETSTAR|ピーチ|PEACH|ZIPAIR|スターフライヤー|エアアジア|エアドゥ|ソラシド|航空)/i, "expense", "交通費", "飛行機"],
+    [/(新幹線|のぞみ|ひかり|こだま|はやぶさ|やまびこ|つばさ|あさま|かがやき|はくたか|さくら|つばめ|EX予約|エクスプレス予約)/i, "expense", "交通費", "新幹線"],
+    [/(ホテル|HOTEL|旅館|民宿|ゲストハウス|楽天トラベル|じゃらん|booking|expedia|アゴダ|AGODA|airbnb)/i, "expense", "交通費", "宿泊費"],
+    [/(レンタカー|タイムズカー|ニッポンレンタカー|オリックスレンタカー|トヨタレンタ|カレコ)/i, "expense", "交通費", "レンタカー"],
+    [/(ETC|高速道路|首都高|NEXCO|有料道路)/i, "expense", "交通費", "高速・有料道路"],
     [/(JR|定期|メトロ|東急|京王|小田急|京急|相鉄|京成|私鉄|MOBILE\s*SUICA|SUICA|PASMO|ICOCA|モバイルスイカ)/i, "expense", "交通費", "電車・バス"],
     [/(タクシー|GO\s|UBER|DIDI)/i, "expense", "交通費", "タクシー"],
     // === 食品 ===
@@ -738,7 +748,8 @@ window.__APP_CONTINUE__ = true;
     holdings: "kakeibo_v5_holdings",
     snapshots: "kakeibo_v5_snapshots",
     autorun: "kakeibo_v5_autorun",
-    audit: "kakeibo_v5_audit"
+    audit: "kakeibo_v5_audit",
+    customDetails: "kakeibo_v5_customDetails"
   };
   let state = {
     entries: [], budget: {}, hidden: {},
@@ -746,7 +757,8 @@ window.__APP_CONTINUE__ = true;
     templates: [], learning: {},
     accounts: [], holdings: [], snapshots: {},
     autorun: {},
-    audit: []
+    audit: [],
+    customDetails: { income: {}, expense: {} }
   };
   let pendingImport = [];
   let charts = {};
@@ -767,6 +779,10 @@ window.__APP_CONTINUE__ = true;
       const s = localStorage.getItem(STORAGE_KEYS.snapshots); if (s) state.snapshots = JSON.parse(s);
       const ar = localStorage.getItem(STORAGE_KEYS.autorun); if (ar) state.autorun = JSON.parse(ar);
       const au = localStorage.getItem(STORAGE_KEYS.audit); if (au) state.audit = JSON.parse(au);
+      const cd = localStorage.getItem(STORAGE_KEYS.customDetails); if (cd) state.customDetails = JSON.parse(cd);
+      if (!state.customDetails) state.customDetails = { income: {}, expense: {} };
+      if (!state.customDetails.income) state.customDetails.income = {};
+      if (!state.customDetails.expense) state.customDetails.expense = {};
     } catch(e){ console.error(e); }
   }
   function save() {
@@ -782,6 +798,7 @@ window.__APP_CONTINUE__ = true;
       localStorage.setItem(STORAGE_KEYS.snapshots, JSON.stringify(state.snapshots));
       localStorage.setItem(STORAGE_KEYS.autorun, JSON.stringify(state.autorun));
       localStorage.setItem(STORAGE_KEYS.audit, JSON.stringify(state.audit));
+      localStorage.setItem(STORAGE_KEYS.customDetails, JSON.stringify(state.customDetails));
     } catch(e){ console.error(e); }
   }
   function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
@@ -939,14 +956,53 @@ window.__APP_CONTINUE__ = true;
     });
     fillDetailSelect(typeSelId, catSelId, detSelId);
   }
+  function getAllDetails(type, cat) {
+    const base = CATEGORIES[type][cat] || [];
+    const custom = (state.customDetails && state.customDetails[type] && state.customDetails[type][cat]) || [];
+    return [...base, ...custom];
+  }
+  function addCustomDetail(type, cat, detail) {
+    if (!state.customDetails) state.customDetails = { income: {}, expense: {} };
+    if (!state.customDetails[type]) state.customDetails[type] = {};
+    if (!state.customDetails[type][cat]) state.customDetails[type][cat] = [];
+    if (getAllDetails(type, cat).includes(detail)) return false;
+    state.customDetails[type][cat].push(detail);
+    save();
+    return true;
+  }
   function fillDetailSelect(typeSelId, catSelId, detSelId) {
     const type = document.getElementById(typeSelId).value;
     const cat = document.getElementById(catSelId).value;
     const detSel = document.getElementById(detSelId);
+    const prevValue = detSel.value;
     detSel.innerHTML = "";
-    (CATEGORIES[type][cat] || []).forEach(d => {
+    getAllDetails(type, cat).forEach(d => {
       const o = document.createElement("option"); o.value = d; o.textContent = d; detSel.appendChild(o);
     });
+    const addOpt = document.createElement("option");
+    addOpt.value = "__add_new__";
+    addOpt.textContent = "+ 新規追加...";
+    detSel.appendChild(addOpt);
+    if (prevValue && Array.from(detSel.options).some(o => o.value === prevValue)) {
+      detSel.value = prevValue;
+    }
+    detSel.onchange = function() {
+      if (this.value === "__add_new__") {
+        const newDet = prompt(`新しい詳細を追加（${cat}）:`);
+        if (newDet && newDet.trim()) {
+          const trimmed = newDet.trim();
+          if (addCustomDetail(type, cat, trimmed)) {
+            fillDetailSelect(typeSelId, catSelId, detSelId);
+            this.value = trimmed;
+          } else {
+            alert("既に存在する詳細です");
+            this.value = getAllDetails(type, cat)[0] || "";
+          }
+        } else {
+          this.value = getAllDetails(type, cat)[0] || "";
+        }
+      }
+    };
   }
 
   document.getElementById("e-type").addEventListener("change", () => fillCategorySelect("e-type", "e-category", "e-detail"));
@@ -1118,24 +1174,46 @@ window.__APP_CONTINUE__ = true;
     const detSel = div.querySelector('[data-field="detail"]');
     function fillDet(cat) {
       detSel.innerHTML = "";
-      (CATEGORIES[r.type][cat] || []).forEach(d => {
+      getAllDetails(r.type, cat).forEach(d => {
         const o = document.createElement("option"); o.value = d; o.textContent = d;
         if (d === r.detail) o.selected = true;
         detSel.appendChild(o);
       });
+      const addOpt = document.createElement("option");
+      addOpt.value = "__add_new__";
+      addOpt.textContent = "+ 新規追加...";
+      detSel.appendChild(addOpt);
     }
     fillDet(r.category);
     catSel.addEventListener("change", () => {
       const oldCat = pendingImport[idx].category;
       const oldDet = pendingImport[idx].detail;
       pendingImport[idx].category = catSel.value;
-      pendingImport[idx].detail = (CATEGORIES[r.type][catSel.value] || ["雑費"])[0];
+      pendingImport[idx].detail = (getAllDetails(r.type, catSel.value) || ["雑費"])[0];
       fillDet(catSel.value);
       if (oldCat !== catSel.value || oldDet !== pendingImport[idx].detail) {
         recordLearning(r.memo, r.type, pendingImport[idx].category, pendingImport[idx].detail);
       }
     });
     detSel.addEventListener("change", () => {
+      if (detSel.value === "__add_new__") {
+        const newDet = prompt(`新しい詳細を追加（${pendingImport[idx].category}）:`);
+        if (newDet && newDet.trim()) {
+          const trimmed = newDet.trim();
+          if (addCustomDetail(r.type, pendingImport[idx].category, trimmed)) {
+            fillDet(pendingImport[idx].category);
+            detSel.value = trimmed;
+            pendingImport[idx].detail = trimmed;
+            recordLearning(r.memo, r.type, pendingImport[idx].category, trimmed);
+          } else {
+            alert("既に存在する詳細です");
+            detSel.value = pendingImport[idx].detail;
+          }
+        } else {
+          detSel.value = pendingImport[idx].detail;
+        }
+        return;
+      }
       pendingImport[idx].detail = detSel.value;
       recordLearning(r.memo, r.type, pendingImport[idx].category, pendingImport[idx].detail);
     });
@@ -2302,6 +2380,36 @@ window.__APP_CONTINUE__ = true;
     });
     const learnCount = Object.keys(state.learning).length;
     document.getElementById("learn-status").textContent = `現在 ${learnCount} 件のパターンを学習しています。`;
+    renderCustomDetailsList();
+  }
+  function renderCustomDetailsList() {
+    const el = document.getElementById("custom-details-list");
+    if (!el) return;
+    el.innerHTML = "";
+    const cd = state.customDetails || { income: {}, expense: {} };
+    let total = 0;
+    ["expense", "income"].forEach(type => {
+      const typeLabel = type === "expense" ? "支出" : "収入";
+      Object.keys(cd[type] || {}).forEach(cat => {
+        (cd[type][cat] || []).forEach(det => {
+          total++;
+          const row = document.createElement("div");
+          row.style.cssText = "display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 0.5px solid var(--border); font-size: 13px;";
+          row.innerHTML = `<span style="flex: 1;"><span style="color: var(--text-3); font-size: 11px;">${typeLabel} / ${cat}</span><br>${det}</span><button class="danger-btn" style="padding: 4px 10px; font-size: 11px;">削除</button>`;
+          row.querySelector("button").addEventListener("click", () => {
+            if (confirm(`「${det}」を削除しますか？\n（既に取引で使われている分類はそのまま残ります）`)) {
+              state.customDetails[type][cat] = state.customDetails[type][cat].filter(d => d !== det);
+              save();
+              renderCustomDetailsList();
+            }
+          });
+          el.appendChild(row);
+        });
+      });
+    });
+    if (total === 0) {
+      el.innerHTML = '<p style="font-size: 12px; color: var(--text-3); margin: 0;">まだ追加した詳細はありません。</p>';
+    }
   }
   document.getElementById("learn-clear").addEventListener("click", () => {
     if (confirm("学習データをリセットしますか？")) { state.learning = {}; save(); renderSettings(); }
