@@ -1060,7 +1060,15 @@ window.__APP_CONTINUE__ = true;
         if (!a) continue;
         amount = Math.abs(a); isIncome = a > 0;
       } else if (preset === "rakuten-card" || preset === "smbc-card") {
-        date = parseDate(r[0]); desc = r[1] || ""; amount = parseAmount(r[2]); isIncome = false;
+        date = parseDate(r[0]); desc = r[1] || "";
+        // 楽天カード新形式（10列）: 利用日,利用店名,利用者,支払方法,利用金額,...
+        // 旧形式（3列）: 利用日,利用店名,金額
+        if (r.length >= 5 && (r[3] || "").match(/払い|分割|リボ/)) {
+          amount = parseAmount(r[4]);
+        } else {
+          amount = parseAmount(r[2]);
+        }
+        isIncome = false;
       } else if (preset === "suica") {
         date = parseDate(r[0]); desc = (r[3] || r[2] || r[1] || "") + " " + (r[4] || "");
         amount = parseAmount(r[5] || r[4] || r[3]); isIncome = false;
