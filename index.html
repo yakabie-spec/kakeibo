@@ -157,11 +157,18 @@ label { font-size: 12px; color: var(--text-2); display: block; margin-bottom: 4p
         <button data-period="6" class="active">6ヶ月</button>
         <button data-period="12">12ヶ月</button>
         <button data-period="all">全期間</button>
+        <button data-period="custom">期間指定</button>
       </div>
       <div class="toggle" id="dash-type">
         <button data-type="expense" class="active">支出</button>
         <button data-type="income">収入</button>
       </div>
+    </div>
+    <div id="dash-custom-range" style="display: none; gap: 8px; margin-bottom: 12px; align-items: center; flex-wrap: wrap;">
+      <label style="font-size: 12px; color: var(--text-2); margin: 0;">開始</label>
+      <select id="dash-range-from" style="width: auto; min-width: 110px;"></select>
+      <label style="font-size: 12px; color: var(--text-2); margin: 0;">〜 終了</label>
+      <select id="dash-range-to" style="width: auto; min-width: 110px;"></select>
     </div>
     <div class="toggle-row">
       <div class="toggle" id="dash-grain">
@@ -763,6 +770,7 @@ window.__APP_CONTINUE__ = true;
   let pendingImport = [];
   let charts = {};
   let dashType = "expense", dashPeriod = 6, dashGrain = "category", dashMode = "amount";
+  let dashRangeFrom = null, dashRangeTo = null;
   let editingTemplate = null, editingAccount = null, editingHolding = null;
   let ocrWorker = null;
 
@@ -1428,7 +1436,15 @@ window.__APP_CONTINUE__ = true;
       b.addEventListener("click", () => {
         document.querySelectorAll("#" + id + " button").forEach(x => x.classList.remove("active"));
         b.classList.add("active");
-        if (id === "dash-period") dashPeriod = b.dataset.period === "all" ? "all" : parseInt(b.dataset.period);
+        if (id === "dash-period") {
+          const v = b.dataset.period;
+          if (v === "all") dashPeriod = "all";
+          else if (v === "custom") {
+            dashPeriod = "custom";
+            initCustomRange();
+          } else dashPeriod = parseInt(v);
+          document.getElementById("dash-custom-range").style.display = (v === "custom") ? "flex" : "none";
+        }
         if (id === "dash-type") dashType = b.dataset.type;
         if (id === "dash-grain") dashGrain = b.dataset.grain;
         if (id === "dash-mode") dashMode = b.dataset.mode;
@@ -1436,6 +1452,30 @@ window.__APP_CONTINUE__ = true;
       });
     });
   });
+
+  function initCustomRange() {
+    const months = getMonths();
+    if (months.length === 0) return;
+    const fromSel = document.getElementById("dash-range-from");
+    const toSel = document.getElementById("dash-range-to");
+    const optsHtml = months.map(m => `<option value="${m}">${m}</option>`).join("");
+    fromSel.innerHTML = optsHtml;
+    toSel.innerHTML = optsHtml;
+    if (!dashRangeFrom || !months.includes(dashRangeFrom)) dashRangeFrom = months[Math.max(0, months.length - 6)];
+    if (!dashRangeTo || !months.includes(dashRangeTo)) dashRangeTo = months[months.length - 1];
+    fromSel.value = dashRangeFrom;
+    toSel.value = dashRangeTo;
+    fromSel.onchange = () => {
+      dashRangeFrom = fromSel.value;
+      if (dashRangeFrom > dashRangeTo) { dashRangeTo = dashRangeFrom; toSel.value = dashRangeTo; }
+      renderDashboard();
+    };
+    toSel.onchange = () => {
+      dashRangeTo = toSel.value;
+      if (dashRangeTo < dashRangeFrom) { dashRangeFrom = dashRangeTo; fromSel.value = dashRangeFrom; }
+      renderDashboard();
+    };
+  }
 
   function getMonths() {
     const set = new Set(state.entries.map(e => ymOf(e.date)));
@@ -1507,7 +1547,11 @@ window.__APP_CONTINUE__ = true;
     const ym = document.getElementById("dash-month").value;
     const allMonths = getMonths();
     let months = allMonths;
-    if (dashPeriod !== "all") months = allMonths.slice(-dashPeriod);
+    if (dashPeriod === "custom" && dashRangeFrom && dashRangeTo) {
+      months = allMonths.filter(m => m >= dashRangeFrom && m <= dashRangeTo);
+    } else if (dashPeriod !== "all") {
+      months = allMonths.slice(-dashPeriod);
+    }
 
     const monthEntries = state.entries.filter(e => ymOf(e.date) === ym);
     const inc = monthEntries.filter(e => e.type === "income").reduce((s,e) => s+e.amount, 0);
