@@ -2478,9 +2478,57 @@ window.__APP_CONTINUE__ = true;
       try {
         const data = JSON.parse(e.target.result);
         if (data.entries && Array.isArray(data.entries)) {
-          if (confirm(`${data.entries.length}件の記録を読み込みます。現在のデータは置き換えられます。続行しますか？`)) {
+          const choice = prompt(
+            `${data.entries.length}件の記録が見つかりました。\n\n` +
+            `読み込み方法を選んでください:\n` +
+            `  1 = 置き換え（現在のデータを全削除して入れ替え）\n` +
+            `  2 = マージ追加（現在のデータに重複なく追加）\n` +
+            `  キャンセル = 中止\n\n` +
+            `番号を入力:`,
+            "2"
+          );
+          if (!choice) return;
+          if (choice === "1") {
+            if (!confirm("現在のデータをすべて削除して置き換えます。本当に続行しますか？")) return;
             Object.keys(data).forEach(k => { if (k in state) state[k] = data[k]; });
-            save(); alert("読み込みました");
+            save(); alert("置き換えで読み込みました");
+            document.querySelector('[data-tab="dashboard"]').click();
+          } else if (choice === "2") {
+            // 重複排除キー: date + amount + category + detail + memo
+            const keyOf = (e) => `${e.date}|${e.amount}|${e.category}|${e.detail||""}|${(e.memo||"").trim()}`;
+            const existing = new Set(state.entries.map(keyOf));
+            let added = 0, skipped = 0;
+            data.entries.forEach(e => {
+              if (existing.has(keyOf(e))) { skipped++; return; }
+              // IDを新規発行（衝突防止）
+              const newEntry = { ...e, id: "imp_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8) };
+              state.entries.push(newEntry);
+              existing.add(keyOf(newEntry));
+              added++;
+            });
+            // 学習データもマージ（既存優先）
+            if (data.learning && typeof data.learning === "object") {
+              Object.keys(data.learning).forEach(k => {
+                if (!state.learning[k]) state.learning[k] = data.learning[k];
+              });
+            }
+            // カスタム詳細もマージ
+            if (data.customDetails && typeof data.customDetails === "object") {
+              ["income", "expense"].forEach(t => {
+                if (data.customDetails[t]) {
+                  Object.keys(data.customDetails[t]).forEach(c => {
+                    if (!state.customDetails[t]) state.customDetails[t] = {};
+                    if (!state.customDetails[t][c]) state.customDetails[t][c] = [];
+                    data.customDetails[t][c].forEach(d => {
+                      if (!state.customDetails[t][c].includes(d)) state.customDetails[t][c].push(d);
+                    });
+                  });
+                }
+              });
+            }
+            logAudit("bulk", "import_merge", state.entries.slice(-added), { added, skipped });
+            save();
+            alert(`マージ完了: ${added}件を追加、${skipped}件は重複としてスキップ`);
             document.querySelector('[data-tab="dashboard"]').click();
           }
         } else alert("無効なファイルです");
