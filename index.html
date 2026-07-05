@@ -1095,7 +1095,9 @@ window.__APP_CONTINUE__ = true;
   }
   function parseAmount(s) {
     if (!s) return 0;
-    return parseFloat(String(s).replace(/[¥,円\s]/g, "")) || 0;
+    const t = String(s).replace(/[¥,円\s"]/g, "");
+    if (!/^-?\d+(\.\d+)?$/.test(t)) return 0;
+    return parseFloat(t) || 0;
   }
   function processPreset(rows, preset) {
     const result = [];
@@ -1131,14 +1133,22 @@ window.__APP_CONTINUE__ = true;
         amount = Math.abs(a); isIncome = a > 0;
       } else if (preset === "rakuten-card" || preset === "smbc-card") {
         date = parseDate(r[0]); desc = r[1] || "";
-        // 楽天カード新形式（10列）: 利用日,利用店名,利用者,支払方法,利用金額,...
-        // 旧形式（3列）: 利用日,利用店名,金額
-        if (r.length >= 5 && (r[3] || "").match(/払い|分割|リボ/)) {
-          amount = parseAmount(r[4]);
-        } else {
-          amount = parseAmount(r[2]);
+        // 金額列はヘッダー名から特定（利用者列の有無など列構成の違いに対応）
+        let amtIdx = -1;
+        if (startIdx === 1 && rows[0]) {
+          amtIdx = rows[0].findIndex(h => /利用金額/.test(h));
+          if (amtIdx < 0) amtIdx = rows[0].findIndex(h => /支払総額|利用額|金額/.test(h));
         }
-        isIncome = false;
+        amount = amtIdx >= 0 ? parseAmount(r[amtIdx]) : 0;
+        if (!amount) {
+          // ヘッダーが無い場合: 3列目以降で最初に数値として読める列を金額とみなす
+          for (let j = 2; j < r.length; j++) {
+            const v = parseAmount(r[j]);
+            if (v) { amount = v; break; }
+          }
+        }
+        if (amount < 0) { amount = Math.abs(amount); isIncome = true; } // 返金・キャンセル
+        else isIncome = false;
       } else if (preset === "suica") {
         date = parseDate(r[0]); desc = (r[3] || r[2] || r[1] || "") + " " + (r[4] || "");
         amount = parseAmount(r[5] || r[4] || r[3]); isIncome = false;
