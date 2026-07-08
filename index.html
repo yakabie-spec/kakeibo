@@ -815,6 +815,7 @@ window.__APP_CONTINUE__ = true;
       localStorage.setItem(STORAGE_KEYS.autorun, JSON.stringify(state.autorun));
       localStorage.setItem(STORAGE_KEYS.audit, JSON.stringify(state.audit));
       localStorage.setItem(STORAGE_KEYS.customDetails, JSON.stringify(state.customDetails));
+      if (window.__scheduleCloudBackup) window.__scheduleCloudBackup();
     } catch(e){ console.error(e); }
   }
   function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
@@ -2626,6 +2627,47 @@ window.__APP_CONTINUE__ = true;
       }
     });
   }
+})();
+</script>
+<script>
+/* ===== クラウド自動バックアップ（Dropbox / app-backup.vercel.app）===== */
+(function(){
+  var CFG = { app: "kakeibo", prefix: "kakeibo_", url: "https://app-backup.vercel.app/api/backup", secret: "fd6f0dd7b953cbe909483e4b4ae54a83" };
+  var TS_KEY = CFG.prefix + "cloud_backup_ts";
+  var MIN_INTERVAL = 3 * 60 * 1000; // 送信間隔の下限: 3分
+  var timer = null, lastSent = 0;
+  function collect(){
+    var out = {};
+    for (var i = 0; i < localStorage.length; i++) {
+      var k = localStorage.key(i);
+      if (k && k.indexOf(CFG.prefix) === 0 && k !== TS_KEY) out[k] = localStorage.getItem(k);
+    }
+    return out;
+  }
+  function send(){
+    var data = collect();
+    if (Object.keys(data).length === 0) return;
+    fetch(CFG.url, { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ app: CFG.app, secret: CFG.secret, data: data }) })
+      .then(function(r){
+        if (r.ok) {
+          lastSent = Date.now();
+          try { localStorage.setItem(TS_KEY, new Date().toISOString()); } catch(e){}
+          console.log("[cloud-backup] OK");
+        } else { console.warn("[cloud-backup] HTTP " + r.status); }
+      })
+      .catch(function(e){ console.warn("[cloud-backup] " + e); });
+  }
+  window.__scheduleCloudBackup = function(){
+    clearTimeout(timer);
+    var wait = Math.max(10000, MIN_INTERVAL - (Date.now() - lastSent));
+    timer = setTimeout(send, wait);
+  };
+  // 起動時: 前回送信から6時間以上空いていたら一度送る
+  try {
+    var ts = localStorage.getItem(TS_KEY);
+    if (!ts || (Date.now() - new Date(ts).getTime()) > 6 * 3600 * 1000) setTimeout(send, 8000);
+  } catch(e){}
 })();
 </script>
 </body>
