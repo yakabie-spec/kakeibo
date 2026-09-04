@@ -490,6 +490,17 @@ label { font-size: 12px; color: var(--text-2); display: block; margin-bottom: 4p
 
   <div id="tab-settings" class="tab-content" style="display: none;">
     <div class="card">
+      <p class="section-title">クラウド同期</p>
+      <p class="section-subtitle" id="sync-desc">Googleでサインインすると、iPhoneとMacで同じデータになります。ブラウザのデータを消しても残ります。</p>
+      <div id="sync-status" style="font-size:13px;margin-bottom:10px;color:var(--text-2)">未接続</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" id="sync-signin">Googleでサインイン</button>
+        <button class="btn" id="sync-push">この端末の内容をクラウドへ</button>
+        <button class="btn" id="sync-pull">クラウドから取り込む</button>
+        <button class="btn" id="sync-signout">サインアウト</button>
+      </div>
+    </div>
+    <div class="card">
       <p class="section-title">予算設定（月次）</p>
       <p class="section-subtitle">超過時はダッシュボードに警告。80%超でも事前に警告。</p>
       <div id="budget-list" style="display: grid; gap: 8px;"></div>
@@ -2668,6 +2679,103 @@ window.__APP_CONTINUE__ = true;
     var ts = localStorage.getItem(TS_KEY);
     if (!ts || (Date.now() - new Date(ts).getTime()) > 6 * 3600 * 1000) setTimeout(send, 8000);
   } catch(e){}
+})();
+</script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<script>
+/* ===== Firebase 同期（ToDoリストと同じ保管場所） ===== */
+(function(){
+  var CFG={apiKey:"AIzaSyD-0x83R0E5I8WT53_LEvXOaKUuWRyMUCI",authDomain:"todo-list-26d25.web.app",
+    databaseURL:"https://todo-list-26d25-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId:"todo-list-26d25",storageBucket:"todo-list-26d25.firebasestorage.app",
+    messagingSenderId:"219764127898",appId:"1:219764127898:web:953470a716e14ee8268723"};
+  var PREFIX="kakeibo_v5_", PATH="kakeibo/state", TSK="kakeibo_sync_ts";
+  var db=null,user=null,timer=null,busy=false,pulling=false;
+  function $(id){return document.getElementById(id)}
+  function setStatus(t){var el=$("sync-status");if(el)el.textContent=t}
+  function collect(){
+    var out={};
+    for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);
+      if(k&&k.indexOf(PREFIX)===0)out[k]=localStorage.getItem(k);}
+    return out;
+  }
+  function entryCount(data){
+    try{return JSON.parse((data||{})[PREFIX+"entries"]||"[]").length}catch(e){return 0}
+  }
+  function localTs(){try{return Number(localStorage.getItem(TSK)||0)}catch(e){return 0}}
+  function markTs(t){try{localStorage.setItem(TSK,String(t))}catch(e){}}
+  function apply(data){
+    Object.keys(data||{}).forEach(function(k){try{localStorage.setItem(k,data[k])}catch(e){}});
+  }
+  function push(force){
+    if(!db||!user)return;
+    var data=collect(),n=entryCount(data);
+    db.ref(PATH).once("value").then(function(sn){
+      var v=sn.val()||{},cn=entryCount(v.data);
+      if(!force&&n===0&&cn>0){setStatus("この端末は空です。クラウド("+cn+"件)は保護しました");return}
+      if(!force&&cn>n+5&&!confirm("クラウドには "+cn+" 件、この端末には "+n+" 件あります。\nこの端末の内容で上書きしますか？"))return;
+      var now=Date.now();
+      db.ref(PATH).set({updatedAt:now,count:n,data:data}).then(function(){
+        markTs(now);setStatus("クラウドに保存しました（"+n+"件・"+new Date(now).toLocaleString("ja-JP")+"）");
+      }).catch(function(){setStatus("保存できませんでした")});
+    });
+  }
+  function pull(force){
+    if(!db||!user)return;
+    db.ref(PATH).once("value").then(function(sn){
+      var v=sn.val();
+      if(!v||!v.data){setStatus("クラウドにデータがありません");return}
+      var cn=entryCount(v.data),n=entryCount(collect());
+      if(!force&&!confirm("クラウドの "+cn+" 件をこの端末に取り込みます。\n現在の "+n+" 件は置き換わります。よろしいですか？"))return;
+      pulling=true;apply(v.data);markTs(v.updatedAt||Date.now());
+      setStatus("取り込みました（"+cn+"件）。画面を更新します…");
+      setTimeout(function(){location.reload()},800);
+    });
+  }
+  function onAuth(u){
+    user=u||null;
+    if(!user){setStatus("未接続");return}
+    setStatus(user.email+" で接続中");
+    db.ref(PATH).once("value").then(function(sn){
+      var v=sn.val();
+      var cn=v?entryCount(v.data):0,n=entryCount(collect());
+      var ct=(v&&v.updatedAt)||0;
+      if(cn===0&&n>0){push(true);return}
+      if(cn>0&&n===0){pull(true);return}
+      if(cn>0&&ct>localTs()){
+        setStatus("クラウドの方が新しい（"+cn+"件）。取り込みますか？");
+        if(confirm("クラウドに新しいデータがあります（"+cn+"件）。この端末（"+n+"件）に取り込みますか？"))pull(true);
+      }else{
+        setStatus(user.email+" で接続中（クラウド "+cn+"件／この端末 "+n+"件）");
+      }
+    });
+  }
+  function init(){
+    if(typeof firebase==="undefined"){setStatus("接続できませんでした");return}
+    try{firebase.initializeApp(CFG);db=firebase.database();}catch(e){setStatus("接続できませんでした");return}
+    firebase.auth().onAuthStateChanged(onAuth);
+    var si=$("sync-signin"),so=$("sync-signout"),pu=$("sync-push"),pl=$("sync-pull");
+    if(si)si.onclick=function(){
+      var p=new firebase.auth.GoogleAuthProvider();p.setCustomParameters({prompt:"select_account"});
+      try{firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL)}catch(e){}
+      firebase.auth().signInWithPopup(p).catch(function(e){
+        if(!/popup-closed|cancelled/.test(e.code||""))setStatus("サインインできませんでした（"+(e.code||"")+"）");
+      });
+    };
+    if(so)so.onclick=function(){firebase.auth().signOut()};
+    if(pu)pu.onclick=function(){push(false)};
+    if(pl)pl.onclick=function(){pull(false)};
+  }
+  // save() から呼ばれる既存フックに相乗り
+  var prev=window.__scheduleCloudBackup;
+  window.__scheduleCloudBackup=function(){
+    if(prev)try{prev()}catch(e){}
+    if(pulling)return;
+    clearTimeout(timer);timer=setTimeout(function(){push(false)},4000);
+  };
+  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init);else init();
 })();
 </script>
 </body>
