@@ -798,6 +798,7 @@ window.__APP_CONTINUE__ = true;
   /* 追加タブ（収支細目・分析・通帳まとめ入力）から本体を使うための橋渡し。既存の動きは変えない。 */
   window.APP = {
     get state(){ return state; },
+    get pendingImport(){ try{ return pendingImport; }catch(e){ return null; } },
     save: save, uid: uid, CATEGORIES: CATEGORIES,
     logAudit: (typeof logAudit === "function" ? logAudit : null),
     inferCategory: (typeof inferCategory === "function" ? inferCategory : null),
@@ -3326,6 +3327,9 @@ window.PB={draw:draw,rows:function(){return rows;}};
 #cg-bar .cg-sp{flex:1 1 auto}
 #cg-bar b{font-size:14px;color:var(--text)}
 #cg-bar button{min-height:30px;padding:4px 10px;font-size:12px}
+#cg-bar .cg-alert{color:var(--danger);font-weight:600}
+#csv-preview-list>div.cg-big{background:var(--warning-bg);border-radius:6px}
+.cg-warn{display:inline-block;margin-left:4px;padding:0 5px;border-radius:999px;background:var(--danger);color:#fff;font-size:9px;line-height:15px}
 #csv-confirm[data-zero]{background:var(--bg-3);color:var(--text-3);border-color:var(--border-2)}
 </style>
 <script>
@@ -3334,7 +3338,37 @@ window.PB={draw:draw,rows:function(){return rows;}};
 (function(){
 function el(id){return document.getElementById(id);}
 function boxes(){var l=el('csv-preview-list');return l?Array.prototype.slice.call(l.querySelectorAll('[data-field="exclude"]')):[];}
-function counts(){var cb=boxes(),ex=0;for(var i=0;i<cb.length;i++)if(cb[i].checked)ex++;return {all:cb.length,ex:ex,n:cb.length-ex,cb:cb};}
+var BIG=300000;
+function model(){ try{ var A=window.APP; var m=A&&A.pendingImport; return (m&&m.length!==undefined)?m:null; }catch(e){ return null; } }
+function yen(n){return Math.round(n||0).toLocaleString('ja-JP');}
+function counts(){
+  var cb=boxes(),ex=0,i,m=model(),outAmt=0,inAmt=0,big=0,r;
+  for(i=0;i<cb.length;i++){
+    var on=cb[i].checked; if(on)ex++;
+    if(m){
+      var idx=parseInt(cb[i].getAttribute('data-idx'),10);
+      r=(idx>=0&&idx<m.length)?m[idx]:null;
+      if(r&&!on){ if(r.type==='income')inAmt+=r.amount||0; else { outAmt+=r.amount||0;
+        if((r.amount||0)>=BIG)big++; } }
+    }
+  }
+  return {all:cb.length,ex:ex,n:cb.length-ex,cb:cb,out:outAmt,inc:inAmt,big:big,hasModel:!!m};
+}
+function markBig(){
+  var m=model(); if(!m)return; var cb=boxes();
+  for(var i=0;i<cb.length;i++){
+    var idx=parseInt(cb[i].getAttribute('data-idx'),10);
+    var r=(idx>=0&&idx<m.length)?m[idx]:null;
+    var row=cb[i].closest?cb[i].closest('#csv-preview-list > div'):null;
+    if(!row||!r)continue;
+    var want=(r.type!=='income')&&((r.amount||0)>=BIG);
+    if(want&&!row.classList.contains('cg-big')){ row.classList.add('cg-big');
+      var lab=cb[i].closest('label');
+      if(lab&&!lab.querySelector('.cg-warn')){ var s=document.createElement('span');
+        s.className='cg-warn'; s.textContent='高額'; lab.appendChild(s); } }
+    else if(!want&&row.classList.contains('cg-big')) row.classList.remove('cg-big');
+  }
+}
 
 function bar(){
   var pv=el('csv-preview'); if(!pv)return null;
@@ -3367,7 +3401,13 @@ function update(){
     var c=counts();
     if(!c.all){ setTxt(btn,'textContent','チェックのない行を取り込む'); btn.removeAttribute('data-zero'); return; }
     bar();
-    setTxt(el('cg-count'),'innerHTML','取り込む <b>'+c.n+'</b> 件　/　除外 '+c.ex+' 件（全'+c.all+'件）');
+    markBig();
+    var info='取り込む <b>'+c.n+'</b> 件　/　除外 '+c.ex+' 件（全'+c.all+'件）';
+    if(c.hasModel){
+      info+='<br>支出 <b>¥'+yen(c.out)+'</b>'+(c.inc?'　収入 ¥'+yen(c.inc):'');
+      if(c.big)info+='　<span class="cg-alert">⚠ 30万円以上が '+c.big+' 件</span>';
+    }
+    setTxt(el('cg-count'),'innerHTML',info);
     setTxt(btn,'textContent', c.n===0 ? 'すべて除外になっています' : (c.n+' 件を取り込む'+(c.ex?'（'+c.ex+' 件は除外）':'')));
     if(c.n===0)btn.setAttribute('data-zero','1'); else btn.removeAttribute('data-zero');
   } finally { busy=false; }
