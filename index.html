@@ -794,6 +794,17 @@ window.__APP_CONTINUE__ = true;
     audit: [],
     customDetails: { income: {}, expense: {} }
   };
+
+  /* 追加タブ（収支細目・分析・通帳まとめ入力）から本体を使うための橋渡し。既存の動きは変えない。 */
+  window.APP = {
+    get state(){ return state; },
+    save: save, uid: uid, CATEGORIES: CATEGORIES,
+    logAudit: (typeof logAudit === "function" ? logAudit : null),
+    inferCategory: (typeof inferCategory === "function" ? inferCategory : null),
+    recordLearning: (typeof recordLearning === "function" ? recordLearning : null),
+    renderDashboard: (typeof renderDashboard === "function" ? renderDashboard : null),
+    renderList: (typeof renderList === "function" ? renderList : null)
+  };
   let pendingImport = [];
   let charts = {};
   let dashType = "expense", dashPeriod = 6, dashGrain = "category", dashMode = "amount";
@@ -2648,16 +2659,6 @@ window.__APP_CONTINUE__ = true;
       }
     });
   }
-  /* 追加タブ（収支細目・分析・通帳まとめ入力）から本体を使うための橋渡し。既存の動きは変えない。 */
-  window.APP = {
-    get state(){ return state; },
-    save: save, uid: uid, CATEGORIES: CATEGORIES,
-    logAudit: (typeof logAudit === "function" ? logAudit : null),
-    inferCategory: (typeof inferCategory === "function" ? inferCategory : null),
-    recordLearning: (typeof recordLearning === "function" ? recordLearning : null),
-    renderDashboard: (typeof renderDashboard === "function" ? renderDashboard : null),
-    renderList: (typeof renderList === "function" ? renderList : null)
-  };
 })();
 </script>
 <script>
