@@ -284,9 +284,9 @@ label { font-size: 12px; color: var(--text-2); display: block; margin-bottom: 4p
     </div>
     <div id="csv-preview" class="card" style="display: none;">
       <p class="section-title">プレビュー（タップして分類修正）</p>
-      <p class="section-subtitle">分類を修正すると次回以降同じパターンを学習します。「振替」と判定された行（自分名義振替・カード引落など）は自動でチェック済み（除外対象）になります。チェックボックスで取り込み有無を切り替えできます。</p>
+      <p class="section-subtitle"><b>チェックを入れた行は取り込みません（＝除外）。チェックのない行だけが登録されます。</b>「振替」と判定された行（自分名義の振替・カード引落など）は二重計上を防ぐため、はじめから除外にチェックが入っています。分類を修正すると、次回以降そのパターンを学習します。</p>
       <div id="csv-preview-list" style="max-height: 400px; overflow-y: auto;"></div>
-      <button id="csv-confirm" class="primary" style="width: 100%; margin-top: 10px;">取り込み確定</button>
+      <button id="csv-confirm" class="primary" style="width: 100%; margin-top: 10px;">チェックのない行を取り込む</button>
     </div>
   </div>
 
@@ -1212,7 +1212,7 @@ window.__APP_CONTINUE__ = true;
     const transferBadge = isTransferRow ? '<span class="pill" style="background: var(--info-bg); color: var(--info); font-size: 9px;">振替</span>' : '';
     div.innerHTML = `
       <div style="display: flex; gap: 6px; align-items: center; margin-bottom: 4px;">
-        <input type="checkbox" data-idx="${idx}" data-field="exclude" style="width: 16px; height: 16px; min-height: 16px; margin: 0; flex-shrink: 0;" ${isTransferRow ? 'checked' : ''}>
+        <label class="pb-exlabel" style="display:flex;align-items:center;gap:3px;flex-shrink:0;font-size:10px;color:var(--text-3);cursor:pointer;margin:0"><input type="checkbox" data-idx="${idx}" data-field="exclude" style="width: 16px; height: 16px; min-height: 16px; margin: 0; flex-shrink: 0;" ${isTransferRow ? 'checked' : ''}>除外</label>
         <span style="font-size: 11px;">${r.date.slice(5)}</span>
         <span class="pill ${r.type}">${r.type==="income"?"収":"支"}</span>
         ${transferBadge}
