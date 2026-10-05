@@ -2648,6 +2648,16 @@ window.__APP_CONTINUE__ = true;
       }
     });
   }
+  /* 追加タブ（収支細目・分析・通帳まとめ入力）から本体を使うための橋渡し。既存の動きは変えない。 */
+  window.APP = {
+    get state(){ return state; },
+    save: save, uid: uid, CATEGORIES: CATEGORIES,
+    logAudit: (typeof logAudit === "function" ? logAudit : null),
+    inferCategory: (typeof inferCategory === "function" ? inferCategory : null),
+    recordLearning: (typeof recordLearning === "function" ? recordLearning : null),
+    renderDashboard: (typeof renderDashboard === "function" ? renderDashboard : null),
+    renderList: (typeof renderList === "function" ? renderList : null)
+  };
 })();
 </script>
 <script>
@@ -2875,7 +2885,7 @@ const cls=n=>n>0?'h-up':'h-dn';
 const $=id=>document.getElementById(id);
 const NOW=new Date(), Y0=String(NOW.getFullYear()), MO=NOW.getMonth()+1;
 
-function entries(){return (typeof state!=='undefined'&&state&&Array.isArray(state.entries))?state.entries:[];}
+function entries(){var A=window.APP;if(A&&A.state&&Array.isArray(A.state.entries))return A.state.entries;try{var r=localStorage.getItem('kakeibo_v5_entries');if(r){var e=JSON.parse(r);if(Array.isArray(e))return e;}}catch(x){}return [];}
 function liveYear(y){
   const mid={},leaf={};let any=false;
   for(const e of entries()){
@@ -3166,7 +3176,7 @@ var esc=function(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/<
 var pad=function(n){return (n<10?'0':'')+n;};
 var yen=function(n){return Math.round(n||0).toLocaleString('ja-JP');};
 function CATS(type){
-  try{ if(typeof CATEGORIES!=='undefined'&&CATEGORIES[type])return CATEGORIES[type]; }catch(e){}
+  var A=window.APP; if(A&&A.CATEGORIES&&A.CATEGORIES[type])return A.CATEGORIES[type];
   return {};
 }
 function catOptions(type,sel){
@@ -3178,7 +3188,7 @@ function catOptions(type,sel){
   return h;
 }
 function guess(desc,isIncome){
-  try{ if(typeof inferCategory==='function'){ var r=inferCategory(desc,isIncome);
+  try{ var A=window.APP; if(A&&typeof A.inferCategory==='function'){ var r=A.inferCategory(desc,isIncome);
     if(r&&r.category)return r.category+'|'+r.detail; } }catch(e){}
   return '';
 }
@@ -3281,7 +3291,7 @@ function submit(){
     if(!(amt>0)){ bad.push((i+1)+'行目: 金額'); return; }
     if(!r.k){ bad.push((i+1)+'行目: 科目'); return; }
     var p=r.k.split('|');
-    add.push({ id:(typeof uid==='function'?uid():'pb_'+Date.now()+'_'+i),
+    add.push({ id:(window.APP&&typeof window.APP.uid==='function'?window.APP.uid():'pb_'+Date.now()+'_'+i),
       date:pbYM+'-'+pad(day), type:(r.io==='in'?'income':'expense'),
       category:p[0], detail:p[1]||'', amount:amt, account:pbAcct,
       memo:(r.t||'').trim() });
@@ -3291,17 +3301,19 @@ function submit(){
   var sum=add.reduce(function(s,e){return s+(e.type==='expense'?e.amount:0);},0);
   var inc=add.reduce(function(s,e){return s+(e.type==='income'?e.amount:0);},0);
   if(!confirm(add.length+' 件を追加します。\n支出 ¥'+yen(sum)+'　収入 ¥'+yen(inc)+'\n支払元: '+pbAcct+'　対象: '+pbYM+'\nよろしいですか？')) return;
+  var A=window.APP;
+  if(!A||!A.state||!Array.isArray(A.state.entries)||typeof A.save!=='function'){ msg('本体とつながっていないため保存できません。ページを再読み込みしてください。'); return; }
   try{
     add.forEach(function(e){
-      state.entries.push(e);
-      try{ if(typeof logAudit==='function')logAudit('add','passbook',e); }catch(x){}
-      try{ if(typeof recordLearning==='function'&&e.memo)recordLearning(e.memo,e.type,e.category,e.detail); }catch(x){}
+      A.state.entries.push(e);
+      try{ if(typeof A.logAudit==='function')A.logAudit('add','passbook',e); }catch(x){}
+      try{ if(typeof A.recordLearning==='function'&&e.memo)A.recordLearning(e.memo,e.type,e.category,e.detail); }catch(x){}
     });
-    if(typeof save==='function')save();
+    A.save();
   }catch(err){ msg('保存に失敗しました: '+err.message); return; }
   rows=[]; blank(5); draw();
   msg(add.length+' 件を追加しました。支出 ¥'+yen(sum)+'／収入 ¥'+yen(inc)+'（'+pbAcct+'・'+pbYM+'）',true);
-  try{ var db=document.querySelector('[data-tab="dashboard"]'); if(db&&typeof renderDashboard==='function')renderDashboard(); }catch(x){}
+  try{ if(A&&typeof A.renderDashboard==='function')A.renderDashboard(); }catch(x){}
 }
 
 draw();
