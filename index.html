@@ -3358,15 +3358,19 @@ function bar(){
   return b;
 }
 
+var busy=false;
+function setTxt(node,prop,val){ if(node&&node[prop]!==val)node[prop]=val; }
 function update(){
-  var btn=el('csv-confirm'); if(!btn)return;
-  var c=counts();
-  if(!c.all){ btn.textContent='チェックのない行を取り込む'; btn.removeAttribute('data-zero'); return; }
-  bar();
-  var cnt=el('cg-count');
-  if(cnt)cnt.innerHTML='取り込む <b>'+c.n+'</b> 件　/　除外 '+c.ex+' 件（全'+c.all+'件）';
-  btn.textContent = c.n===0 ? 'すべて除外になっています' : (c.n+' 件を取り込む'+(c.ex?'（'+c.ex+' 件は除外）':''));
-  if(c.n===0)btn.setAttribute('data-zero','1'); else btn.removeAttribute('data-zero');
+  if(busy)return; busy=true;
+  try{
+    var btn=el('csv-confirm'); if(!btn)return;
+    var c=counts();
+    if(!c.all){ setTxt(btn,'textContent','チェックのない行を取り込む'); btn.removeAttribute('data-zero'); return; }
+    bar();
+    setTxt(el('cg-count'),'innerHTML','取り込む <b>'+c.n+'</b> 件　/　除外 '+c.ex+' 件（全'+c.all+'件）');
+    setTxt(btn,'textContent', c.n===0 ? 'すべて除外になっています' : (c.n+' 件を取り込む'+(c.ex?'（'+c.ex+' 件は除外）':'')));
+    if(c.n===0)btn.setAttribute('data-zero','1'); else btn.removeAttribute('data-zero');
+  } finally { busy=false; }
 }
 
 document.addEventListener('change',function(e){
@@ -3387,8 +3391,8 @@ document.addEventListener('click',function(e){
   }
 },true);
 
-var pv=el('csv-preview');
-if(pv&&window.MutationObserver)new MutationObserver(function(){update();}).observe(pv,{childList:true,subtree:true});
+var lst=el('csv-preview-list');
+if(lst&&window.MutationObserver)new MutationObserver(function(){ setTimeout(update,0); }).observe(lst,{childList:true});
 update();
 window.CSVGUARD={update:update,counts:counts};
 })();
